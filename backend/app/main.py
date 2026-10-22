@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from .auth import authenticate, create_access_token, require_session, revoke_access_token
 from .config import CORS_ORIGINS, DEMO_EMAIL, using_default_secret
-from .db.database import Base, engine, get_db
+from .db.database import Base, engine, get_db, migrate
 from .models import (
     Account,
     Analysis,
@@ -29,10 +29,19 @@ from .schemas.api import (
     ReviewUpdate,
 )
 from .services.analysis import ENGINE_VERSION, RISK_CATEGORIES, RISK_THRESHOLDS, analyze_text, classify_score, encode_analysis
+from .services.ml_analysis import (
+    ML_ENGINE_VERSION as ML_ENGINE_VERSION,
+    analyze_text as analyze_text_ml,
+    classify_score as classify_score_ml,
+    encode_analysis as encode_analysis_ml,
+    get_cached_metrics as get_ml_metrics,
+)
+from .data.ml_training_data import TRAINING_VERSION
 
 logger = logging.getLogger("traceguard")
 
 Base.metadata.create_all(bind=engine)
+migrate()
 
 app = FastAPI(
     title="TraceGuard AI API",
@@ -108,6 +117,7 @@ def record_dict(record: ContentRecord, db: Session) -> dict:
                 "matched_indicators": json.loads(analysis.matched_indicators_json),
                 "explanations": json.loads(analysis.explanation_json),
                 "engine_version": analysis.engine_version,
+                "ml_probability": analysis.ml_probability,
                 "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
             }
             if analysis
@@ -162,20 +172,45 @@ def session_info(session: dict = Depends(require_session)):
     }
 
 
+@api.get("/model/info")
+def model_info():
+    """Public metadata about the offline ML classifier (distinct from the rule engine)."""
+    metrics = get_ml_metrics()
+    return {
+        "engine_version": ML_ENGINE_VERSION,
+        "engine_type": "offline_ml",
+        "model_type": "tfidf_logistic_regression",
+        "data_mode": "synthetic_offline",
+        "training_version": TRAINING_VERSION,
+        "metrics": metrics,
+        "methodology_principle": (
+            "The ML classifier is a synthetic-data offline demonstration. TF-IDF vectorization "
+            "plus LogisticRegression produces a predicted-class probability output (confidence-like "
+            "score) mapped to a 0-100 review priority score. It is not evidence of wrongdoing and "
+            "requires human review. Not a calibrated probability of criminal activity."
+        ),
+    }
+
+
 @public_api.get("/meta")
 def meta():
     """Public metadata describing the synthetic data mode and the risk vocabulary."""
+    ml_metrics = get_ml_metrics()
     return {
         "app": "TraceGuard AI",
         "version": app.version,
         "data_mode": "synthetic_offline",
         "engine_version": ENGINE_VERSION,
+        "ml_engine_version": ML_ENGINE_VERSION,
         "risk_categories": RISK_CATEGORIES,
         "risk_thresholds": RISK_THRESHOLDS,
+        "ml_metrics": ml_metrics,
         "methodology_principle": (
             "TraceGuard AI is a synthetic-data research demonstration. Rule-based scores "
             "rank records for human review; a score is not a probability and never evidence "
-            "that an account is involved in criminal activity."
+            "that an account is involved in criminal activity. The optional ML classifier "
+            "produces a predicted-class probability output from a synthetic labelled corpus, "
+            "also for review prioritization only."
         ),
         "synthetic_data_notice": (
             "Every account, content record, case and relationship in this instance is "
@@ -384,23 +419,114 @@ def get_record(record_id: int, db: Session = Depends(get_db)):
 
 
 @api.post("/analysis/run/{record_id}")
-def run_analysis(record_id: int, db: Session = Depends(get_db)):
+def run_analysis(
+    record_id: int,
+    engine: str = Query("rules", pattern="^(rules|ml)$"),
+    db: Session = Depends(get_db),
+):
     record = db.get(ContentRecord, record_id)
     if not record:
         raise HTTPException(404, "Record not found")
-    result = analyze_text(record.content_text)
-    matched, explanations = encode_analysis(result)
+    if engine == "ml":
+        result = analyze_text_ml(record.content_text)
+        matched, explanations = encode_analysis_ml(result)
+        ml_probability = result.get("ml_probability")
+        engine_version = ML_ENGINE_VERSION
+        ml_positive = result.get("ml_positive_features", [])
+        ml_negative = result.get("ml_negative_features", [])
+    else:
+        result = analyze_text(record.content_text)
+        matched, explanations = encode_analysis(result)
+        ml_probability = None
+        engine_version = ENGINE_VERSION
+        ml_positive = None
+        ml_negative = None
     analysis = Analysis(
         record_id=record.id,
         score=result["score"],
         risk_category=result["risk_category"],
-        engine_version=ENGINE_VERSION,
+        engine_version=engine_version,
+        ml_probability=ml_probability,
         matched_indicators_json=matched,
         explanation_json=explanations,
     )
     db.add(analysis)
     db.commit()
-    return {"record_id": record.id, **result}
+    payload = {"record_id": record.id, **result, "ml_probability": ml_probability}
+    if ml_positive is not None:
+        payload["ml_positive_features"] = ml_positive
+        payload["ml_negative_features"] = ml_negative
+    return payload
+
+
+@api.get("/analysis/compare/{record_id}")
+def compare_engines(record_id: int, db: Session = Depends(get_db)):
+    """Run both engines on the same record and return side-by-side results.
+
+    Preserves each engine's original output and flags category agreement.
+    Does not average scores or create a combined risk score.
+    """
+    record = db.get(ContentRecord, record_id)
+    if not record:
+        raise HTTPException(404, "Record not found")
+
+    rules_result = analyze_text(record.content_text)
+    ml_result = analyze_text_ml(record.content_text)
+
+    rules_matched, rules_explanations = encode_analysis(rules_result)
+    ml_matched, ml_explanations = encode_analysis_ml(ml_result)
+
+    rules_analysis = Analysis(
+        record_id=record.id,
+        score=rules_result["score"],
+        risk_category=rules_result["risk_category"],
+        engine_version=ENGINE_VERSION,
+        ml_probability=None,
+        matched_indicators_json=rules_matched,
+        explanation_json=rules_explanations,
+    )
+    ml_analysis = Analysis(
+        record_id=record.id,
+        score=ml_result["score"],
+        risk_category=ml_result["risk_category"],
+        engine_version=ML_ENGINE_VERSION,
+        ml_probability=ml_result.get("ml_probability"),
+        matched_indicators_json=ml_matched,
+        explanation_json=ml_explanations,
+    )
+    db.add(rules_analysis)
+    db.add(ml_analysis)
+    db.commit()
+
+    agree = rules_result["risk_category"] == ml_result["risk_category"]
+
+    return {
+        "record_id": record.id,
+        "content_text": record.content_text,
+        "agree": agree,
+        "rule_engine": {
+            "engine_version": ENGINE_VERSION,
+            "score": rules_result["score"],
+            "risk_category": rules_result["risk_category"],
+            "matched_indicators": rules_result["matched_indicators"],
+            "explanations": rules_result["explanations"],
+        },
+        "ml_engine": {
+            "engine_version": ML_ENGINE_VERSION,
+            "score": ml_result["score"],
+            "risk_category": ml_result["risk_category"],
+            "ml_probability": ml_result.get("ml_probability"),
+            "matched_indicators": ml_result["matched_indicators"],
+            "positive_features": ml_result.get("ml_positive_features", []),
+            "negative_features": ml_result.get("ml_negative_features", []),
+            "explanations": ml_result["explanations"],
+        },
+        "comparison_note": (
+            "Agreement means both engines assigned the same risk category; "
+            "disagreement is a reason to inspect context, not proof of wrongdoing. "
+            "Scores are not averaged and no combined score is produced."
+        ),
+    }
 
 
 @api.get("/cases")

@@ -4,7 +4,7 @@
 React/TypeScript/Vite frontend → FastAPI REST API → SQLAlchemy → SQLite local file.
 
 ## Dependencies
-Backend: FastAPI, Uvicorn, SQLAlchemy, Pydantic, pytest, httpx.
+Backend: FastAPI, Uvicorn, SQLAlchemy, Pydantic, pytest, httpx, scikit-learn, numpy, scipy, joblib.
 Frontend: React, Vite, TypeScript, Lucide React, Recharts.
 No paid services, API keys, cloud resources, or external AI.
 
@@ -15,6 +15,8 @@ Frontend default: http://127.0.0.1:5173
 
 ## Data and analysis
 All records are synthetic. The deterministic analysis service returns a 0–100 heuristic score, matched indicator list, explanations, and engine version. Score is not a probability or proof.
+
+An optional offline ML classifier (TF-IDF vectorization + LogisticRegression, trained on a synthetic labelled corpus) provides a second independent engine. It returns a predicted-class probability output (confidence-like score) for the synthetic "risky" label mapped to 0–100, top contributing TF-IDF features as positive/negative explanations, and its own engine version. Evaluation uses a stratified held-out split plus an independent synthetic challenge set held out from training. Results are reported honestly: perfect scores on the held-out split reflect keyword-separable synthetic data by design; challenge-set results show realistic, imperfect generalization. Not a calibrated probability of criminal activity.
 
 ## Security
 No real data or credentials. UI displays imported text as text, not HTML. API validates inputs through Pydantic. This is an academic local prototype and not production-secure.

@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *.db
+*.joblib
+ml_metrics.json
+ml_evaluation_report.json
 .env
 node_modules/
 dist/

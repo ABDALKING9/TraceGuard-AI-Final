@@ -13,7 +13,8 @@ public endpoints listed below.
 | POST | `/api/v1/auth/login` | public | Exchange the demonstration credentials for a token |
 | POST | `/api/v1/auth/logout` | public | Revoke the supplied token server side |
 | GET | `/api/v1/auth/session` | bearer | Validate a stored token and return the session user |
-| GET | `/api/v1/meta` | public | Risk vocabulary, thresholds, engine version, methodology principle |
+| GET | `/api/v1/meta` | public | Risk vocabulary, thresholds, engine versions, methodology principle |
+| GET | `/api/v1/model/info` | bearer | Offline ML classifier version, type, and held-out evaluation metrics |
 
 Login request:
 
@@ -121,3 +122,74 @@ requests. Edge `id` values are the `relationships` primary keys and are used
 by `/api/v1/graph/edges/{edge_id}`.
 
 OpenAPI docs are available at `/docs` while the backend is running.
+
+### ML classifier (`?engine=ml`)
+
+The optional offline ML classifier is a scikit-learn pipeline (TF-IDF vectorization +
+LogisticRegression) trained on a synthetic labelled corpus. It is selected via
+`?engine=ml` on `/api/v1/analysis/run/{record_id}` and is clearly distinguishable
+from the rule engine by its `engine_version` (`ml-tfidf-logreg-v1.0`).
+
+ML analysis response adds an `ml_probability` field (0–1, the predicted-class
+probability output / confidence-like score for the synthetic "risky" class — not
+a calibrated probability of criminal activity). Matched indicators show TF-IDF
+feature coefficients and tfidf values rather than rule weights. Positive and
+negative feature contributions are available for explainability.
+
+`GET /api/v1/model/info` returns the ML engine version, model type, training
+version, and held-out + challenge-set evaluation metrics.
+
+`GET /api/v1/analysis/compare/{record_id}` runs both engines on the same record
+and returns their results side by side with an `agree` flag (whether risk
+categories match). Each engine's original output is preserved; no scores are
+averaged and no combined risk score is produced. Disagreement is a reason to
+inspect context, not proof of wrongdoing.
+
+ML evaluation results (run against the 150-record synthetic seed corpus):
+
+| Metric | Value |
+| --- | --- |
+| Total records scored | 150 |
+| Rule engine distribution | Low: 60, Moderate: 45, Elevated: 30, High: 15 |
+| ML engine distribution | Low: 32, Moderate: 46, Elevated: 67, High: 5 |
+| Cross-engine agreement | 55.3% (83/150) |
+| Avg score difference | 17.41 points |
+
+Held-out split (25% of training data, stratified, random_state=42):
+
+| Metric | Value |
+| --- | --- |
+| Accuracy | 1.0000 |
+| Precision (macro) | 1.0000 |
+| Recall (macro) | 1.0000 |
+| F1 (macro) | 1.0000 |
+| Precision (weighted) | 1.0000 |
+| Recall (weighted) | 1.0000 |
+| F1 (weighted) | 1.0000 |
+| ROC-AUC | 1.0000 |
+| Training samples | 192 (121 risky, 71 benign) |
+| Test samples | 48 (30 risky, 18 benign) |
+
+Independent challenge set (23 samples, never used in training or tuning):
+
+| Metric | Value |
+| --- | --- |
+| Accuracy | 0.8261 |
+| Precision (macro) | 0.8333 |
+| Recall (macro) | 0.8667 |
+| F1 (macro) | 0.8231 |
+| Precision (weighted) | 0.8841 |
+| Recall (weighted) | 0.8261 |
+| F1 (weighted) | 0.8301 |
+| ROC-AUC | 0.9750 |
+| Challenge samples | 23 (8 risky, 15 benign) |
+
+Challenge-set confusion matrix: [[11, 4], [0, 8]]
+(11 benign correctly classified, 4 benign false positives, 0 risky false negatives,
+8 risky correctly classified).
+
+All metrics above are produced by executed code (see `scripts/evaluate_ml.py` and
+`data/ml_evaluation_report.json`). The perfect held-out scores reflect the
+synthetic, keyword-separable training corpus (risky and benign vocabularies barely
+overlap by design); they are demonstration metrics, not real-world performance
+claims. Challenge-set results show realistic, imperfect generalization.

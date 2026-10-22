@@ -22,6 +22,18 @@ def enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
+
+def migrate():
+    """Add ML columns to existing analyses tables (idempotent, no-op if present)."""
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(engine)
+    columns = {col["name"] for col in inspector.get_columns("analyses")}
+    if "ml_probability" not in columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE analyses ADD COLUMN ml_probability REAL NULL"))
+            conn.commit()
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 class Base(DeclarativeBase):

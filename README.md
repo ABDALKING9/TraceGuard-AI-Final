@@ -5,7 +5,7 @@ This package is a deterministic starter codebase for an offline academic MVP. It
 ## Stack
 - Backend: Python, FastAPI, SQLAlchemy, SQLite
 - Frontend: React, TypeScript, Vite, Recharts, Cytoscape
-- Detection: transparent deterministic rules
+- Detection: transparent deterministic rules + optional offline scikit-learn ML classifier (TF-IDF + LogisticRegression)
 - Authentication: local demonstration credential with signed bearer tokens
 
 ## Run backend (from project root)
@@ -67,6 +67,17 @@ written to `localStorage` and no cookie is used.
 ```bash
 pytest backend/tests -q
 ```
+Includes ML classifier tests in `backend/tests/test_ml.py` plus API tests
+for `/api/v1/analysis/run/{record_id}?engine=ml`, `/api/v1/model/info`,
+and `/api/v1/analysis/compare/{record_id}`.
+
+## Evaluate ML classifier
+```bash
+python scripts/evaluate_ml.py
+```
+Scores all 150 seed records with both engines and writes
+`data/ml_evaluation_report.json` with real metrics from executed code.
+Includes held-out split metrics and independent challenge-set metrics.
 
 ## Test frontend
 ```bash

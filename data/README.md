@@ -16,6 +16,10 @@ exist.
 Local backups written by the maintainer live in `data/backups/` and are ignored
 by git as well.
 
+The offline ML classifier persists its fitted pipeline as `data/ml_model.joblib`
+and held-out evaluation metrics as `data/ml_metrics.json`. These files are
+created on first ML analysis run and are not committed to the repository.
+
 To point the API at a different database file, set `TRACEGUARD_DATABASE_URL`:
 
 ```bash

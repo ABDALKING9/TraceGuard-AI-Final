@@ -51,6 +51,7 @@ describe("RecordTable", () => {
               matched_indicators: [],
               explanations: [],
               engine_version: "rules-1.1",
+              ml_probability: null,
               analyzed_at: null,
             },
           },

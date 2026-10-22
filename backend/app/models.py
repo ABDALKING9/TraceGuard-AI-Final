@@ -47,6 +47,7 @@ class Analysis(Base):
     score: Mapped[int] = mapped_column(Integer)
     risk_category: Mapped[str] = mapped_column(String(20))
     engine_version: Mapped[str] = mapped_column(String(30), default="rules-1.0")
+    ml_probability: Mapped[float | None] = mapped_column(nullable=True)
     matched_indicators_json: Mapped[str] = mapped_column(Text, default="[]")
     explanation_json: Mapped[str] = mapped_column(Text, default="[]")
     analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

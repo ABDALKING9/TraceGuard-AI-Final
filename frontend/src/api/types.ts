@@ -1,6 +1,8 @@
 export type RiskCategory = "Low" | "Moderate" | "Elevated" | "High";
 
-export type MatchedIndicator = { id: string; label: string; weight: number };
+export type MatchedIndicator = { id: string; label: string; weight: number; tfidf?: number; coef?: number };
+
+export type MlFeatureContribution = { id: string; label: string; weight: number; tfidf: number; coef: number };
 
 export type AnalysisPayload = {
   score: number;
@@ -8,7 +10,30 @@ export type AnalysisPayload = {
   matched_indicators: MatchedIndicator[];
   explanations: string[];
   engine_version: string;
+  ml_probability: number | null;
   analyzed_at: string | null;
+  ml_positive_features?: MlFeatureContribution[];
+  ml_negative_features?: MlFeatureContribution[];
+};
+
+export type CompareEngineResult = {
+  engine_version: string;
+  score: number;
+  risk_category: RiskCategory;
+  matched_indicators: MatchedIndicator[];
+  explanations: string[];
+  ml_probability?: number | null;
+  positive_features?: MlFeatureContribution[];
+  negative_features?: MlFeatureContribution[];
+};
+
+export type CompareResponse = {
+  record_id: number;
+  content_text: string;
+  agree: boolean;
+  rule_engine: CompareEngineResult;
+  ml_engine: CompareEngineResult;
+  comparison_note: string;
 };
 
 export type RecordItem = {
@@ -147,8 +172,10 @@ export type MetaResponse = {
   version: string;
   data_mode: string;
   engine_version: string;
+  ml_engine_version: string;
   risk_categories: string[];
   risk_thresholds: Record<string, number>;
+  ml_metrics: any;
   methodology_principle: string;
   synthetic_data_notice: string;
   demo_auth: { enabled: boolean; mode: string; email: string; note: string };

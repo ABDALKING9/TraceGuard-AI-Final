@@ -1,4 +1,5 @@
 import type {
+  CompareResponse,
   LoginResponse,
   MetaResponse,
   SessionResponse,
@@ -115,4 +116,12 @@ export async function logout(): Promise<void> {
 
 export async function fetchMeta(): Promise<MetaResponse> {
   return apiFetch<MetaResponse>("/api/v1/meta");
+}
+
+export async function fetchModelInfo(): Promise<{ engine_version: string; engine_type: string; model_type: string; data_mode: string; training_version: string; metrics: any; methodology_principle: string }> {
+  return apiFetch("/api/v1/model/info");
+}
+
+export async function compareEngines(recordId: number): Promise<CompareResponse> {
+  return apiFetch<CompareResponse>(`/api/v1/analysis/compare/${recordId}`);
 }

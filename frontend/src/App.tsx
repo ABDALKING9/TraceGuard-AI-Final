@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { apiFetch, fetchMeta } from "./api/client";
+import { apiFetch, compareEngines, fetchMeta } from "./api/client";
 import type {
   ActivityResponse,
   CaseDetail,
@@ -112,11 +112,22 @@ function Workspace() {
     }
   }
 
-  async function runAnalysis(recordId: number) {
+  async function runAnalysis(recordId: number, engine: string = "rules") {
     try {
-      await apiFetch(`/api/v1/analysis/run/${recordId}`, { method: "POST" });
+      await apiFetch(`/api/v1/analysis/run/${recordId}?engine=${engine}`, { method: "POST" });
       await load(activityInterval);
-      setToast(`Analysis saved for record #${recordId}.`);
+      setToast(`Analysis saved for record #${recordId} (${engine} engine).`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function compareRecordEngines(recordId: number) {
+    try {
+      const result = await compareEngines(recordId);
+      await load(activityInterval);
+      setToast(`Compared rule vs ML for record #${recordId}. ${result.agree ? "Engines agree." : "Engines disagree — review context."}`);
+      return result;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -161,7 +172,9 @@ function Workspace() {
       await load(activityInterval);
       setToast(`Record #${recordId} attached to case #${caseId}.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      throw new Error(msg);
     }
   }
 
@@ -174,7 +187,9 @@ function Workspace() {
       await load(activityInterval);
       setToast("Analyst note saved.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      throw new Error(msg);
     }
   }
 
@@ -360,6 +375,7 @@ function Workspace() {
         cases={cases}
         onClose={() => setSelected(null)}
         onRunAnalysis={runAnalysis}
+        onCompareEngines={compareRecordEngines}
         onUpdateReview={updateReview}
         onAttachToCase={attachToCase}
         onAddNote={(caseId, recordId, noteText) => addNote(caseId, noteText, "Pending Review", recordId)}

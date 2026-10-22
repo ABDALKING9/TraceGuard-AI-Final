@@ -3,7 +3,7 @@
 - `platforms`: simulated platform name and description.
 - `accounts`: fictional username, display name, platform FK.
 - `content_records`: fictional post/message, account FK, type, text, review status, synthetic flag.
-- `analyses`: record FK, score 0–100, risk category, engine version, matched indicators JSON, explanations JSON.
+- `analyses`: record FK, score 0–100, risk category, engine version (`rules-1.1` or `ml-tfidf-logreg-v1.0`), ml_probability (0–1, ML only), matched indicators JSON, explanations JSON.
 - `cases`: title, description, status, timestamps.
 - `case_records`: unique case/record join.
 - `relationships`: source/target account FKs, type, shared synthetic feature, evidence description.

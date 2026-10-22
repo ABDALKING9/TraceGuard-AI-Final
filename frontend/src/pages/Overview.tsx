@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -39,6 +40,11 @@ export function Overview({
   onOpenExplorer: () => void;
 }) {
   const platformRows = summary?.platform_distribution ?? [];
+  const formatMetric = useCallback((value: number | null | undefined): string => {
+    if (value === null || value === undefined || Number.isNaN(value)) return "—";
+    return (value * 100).toFixed(1) + "%";
+  }, []);
+
   return (
     <>
       <div className="page-heading">
@@ -72,6 +78,46 @@ export function Overview({
         <Metric icon={<ShieldCheck />} label="Investigation cases" value={summary?.cases ?? "—"} hint="Persisted in local database" />
         <Metric icon={<AlertTriangle />} label="Pending review" value={summary?.pending_review ?? "—"} hint="Awaiting analyst review" />
       </div>
+
+      {meta?.ml_engine_version && meta?.ml_metrics ? (
+        <section className="panel">
+          <PanelHeading
+            title="Offline ML classifier"
+            subtitle={`TF-IDF + LogisticRegression · ${meta.ml_engine_version}`}
+            icon={<Database size={19} />}
+          />
+          <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+            <Metric icon={<BarChart3 size={16} />} label="Held-out accuracy" value={formatMetric(meta.ml_metrics.held_out_split?.accuracy)} hint="held-out split" />
+            <Metric icon={<ShieldCheck size={16} />} label="Held-out precision" value={formatMetric(meta.ml_metrics.held_out_split?.precision_macro)} hint="macro-averaged" />
+            <Metric icon={<Activity size={16} />} label="Held-out recall" value={formatMetric(meta.ml_metrics.held_out_split?.recall_macro)} hint="macro-averaged" />
+            <Metric icon={<Users size={16} />} label="Held-out F1" value={formatMetric(meta.ml_metrics.held_out_split?.f1_macro)} hint="macro-averaged" />
+            <Metric icon={<Database size={16} />} label="Challenge accuracy" value={formatMetric(meta.ml_metrics.challenge_set?.accuracy)} hint="independent set" />
+            <Metric icon={<BarChart3 size={16} />} label="Challenge F1" value={formatMetric(meta.ml_metrics.challenge_set?.f1_macro)} hint="macro-averaged" />
+          </div>
+          <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginTop: "0.75rem" }}>
+            <Metric icon={<Database size={16} />} label="Training samples" value={meta.ml_metrics.training_samples ?? "—"} hint="synthetic labelled corpus" />
+            <Metric icon={<Database size={16} />} label="Held-out samples" value={meta.ml_metrics.test_samples ?? "—"} hint="stratified split" />
+            <Metric icon={<Database size={16} />} label="Challenge samples" value={meta.ml_metrics.challenge_samples ?? "—"} hint="never used in training" />
+          </div>
+          <p className="body-copy muted">
+            {meta.ml_metrics.note ?? "Metrics are computed on synthetic demonstration data."}
+          </p>
+          <p className="body-copy muted">
+            Perfect held-out scores reflect the keyword-separable synthetic corpus by design.
+            Challenge-set results show realistic, imperfect generalization. Neither is a
+            real-world detection claim.
+          </p>
+        </section>
+      ) : meta?.ml_engine_version ? (
+        <section className="panel">
+          <PanelHeading
+            title="Offline ML classifier"
+            subtitle={`TF-IDF + LogisticRegression · ${meta.ml_engine_version}`}
+            icon={<Database size={19} />}
+          />
+          <p className="body-copy muted">ML metrics are not yet available. Run an ML analysis to train the model and compute evaluation metrics.</p>
+        </section>
+      ) : null}
 
       <div className="two-col">
         <section className="panel">
@@ -113,7 +159,7 @@ export function Overview({
         </section>
       </div>
 
-      <section className="panel">
+  <section className="panel">
         <PanelHeading
           title="Record volume over time"
           subtitle="Synthetic records created per bucket"
